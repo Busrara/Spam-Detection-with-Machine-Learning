@@ -1,0 +1,59 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
+
+# Upload the dataset
+df = pd.read_csv("/content/spam.tsv", sep='\t')
+
+# Veri keşfi
+df.head()
+df.isna().sum()
+df.tail()
+df.describe()
+df['label'].value_counts()
+
+# Split ham and spam messages
+ham = df[df['label'] == 'ham']
+spam = df[df['label'] == 'spam']
+
+# Balancing the data
+ham = ham.sample(spam.shape[0])
+data = pd.concat([ham, spam], ignore_index=True)
+
+# Visualization
+plt.hist(data[data['label'] == 'ham']['length'], bins=100, alpha=0.7, label='ham')
+plt.hist(data[data['label'] == 'spam']['length'], bins=100, alpha=0.7, label='spam')
+plt.legend()
+plt.show()
+
+# Splitting as training and test sets
+X_train, X_test, y_train, y_test = train_test_split(data['message'], data['label'], test_size=0.3, random_state=0, shuffle=True)
+
+# Creating a pipeline
+classifier = Pipeline([
+    ("tfidf", TfidfVectorizer()),
+    ("classifier", RandomForestClassifier(n_estimators=10))
+])
+
+# Training part
+classifier.fit(X_train, y_train)
+
+# Prediction
+y_pred = classifier.predict(X_test)
+
+# Evaluation part for the model
+print("Accuracy Score:", accuracy_score(y_test, y_pred))
+print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+print("Classification Report:\n", classification_report(y_test, y_pred))
+
+# Test messages
+test1 = ["Hello, you are a Natural Language Processing student."]
+test2 = ["Congratulations! You won a lottery ticket worth 1 million dollars! To claim call on 444560"]
+
+print("Test 1 Prediction:", classifier.predict(test1))
+print("Test 2 Prediction:", classifier.predict(test2))
