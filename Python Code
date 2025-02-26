@@ -10,7 +10,7 @@ from sklearn.metrics import classification_report, accuracy_score, confusion_mat
 # Upload the dataset
 df = pd.read_csv("/content/spam.tsv", sep='\t')
 
-# Veri keşfi
+# Explore the data
 df.head()
 df.isna().sum()
 df.tail()
