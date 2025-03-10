@@ -1,59 +1,110 @@
-import numpy as np
+pip install imbalanced-learn
+pip install wordcloud 
+
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from imblearn.over_sampling import SMOTE
+from wordcloud import WordCloud
+import joblib
 
-# Upload the dataset
-df = pd.read_csv("/content/spam.tsv", sep='\t')
+# Load your dataset
+df = pd.read_csv("spam_data.csv")  # Adjust path
 
-# Explore the data
-df.head()
-df.isna().sum()
-df.tail()
-df.describe()
-df['label'].value_counts()
+# Check data distribution
+print(df.describe())
+print(df['label'].value_counts())
 
 # Split ham and spam messages
 ham = df[df['label'] == 'ham']
 spam = df[df['label'] == 'spam']
 
-# Balancing the data
-ham = ham.sample(spam.shape[0])
-data = pd.concat([ham, spam], ignore_index=True)
+# Balancing the data with SMOTE (Synthetic Minority Over-sampling Technique)
+smote = SMOTE(sampling_strategy='auto', random_state=0)
+ham_resampled, spam_resampled = smote.fit_resample(ham[['message']], spam[['message']])
+balanced_data = pd.concat([ham_resampled, spam_resampled], ignore_index=True)
 
-# Visualization
-plt.hist(data[data['label'] == 'ham']['length'], bins=100, alpha=0.7, label='ham')
-plt.hist(data[data['label'] == 'spam']['length'], bins=100, alpha=0.7, label='spam')
+# Visualize the message length distribution
+plt.hist(balanced_data[balanced_data['label'] == 'ham']['length'], bins=100, alpha=0.7, label='ham')
+plt.hist(balanced_data[balanced_data['label'] == 'spam']['length'], bins=100, alpha=0.7, label='spam')
 plt.legend()
 plt.show()
 
-# Splitting as training and test sets
-X_train, X_test, y_train, y_test = train_test_split(data['message'], data['label'], test_size=0.3, random_state=0, shuffle=True)
+# Create and preprocess data
+X = balanced_data['message']
+y = balanced_data['label']
 
-# Creating a pipeline
-classifier = Pipeline([
+# Split into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0, shuffle=True)
+
+# Create pipeline for both RandomForest and Naive Bayes
+pipeline_rf = Pipeline([
     ("tfidf", TfidfVectorizer()),
-    ("classifier", RandomForestClassifier(n_estimators=10))
+    ("classifier", RandomForestClassifier())
 ])
 
-# Training part
-classifier.fit(X_train, y_train)
+pipeline_nb = Pipeline([
+    ("tfidf", TfidfVectorizer()),
+    ("classifier", MultinomialNB())
+])
 
-# Prediction
-y_pred = classifier.predict(X_test)
+# GridSearch for hyperparameter optimization (Random Forest)
+param_grid_rf = {
+    'classifier__n_estimators': [50, 100],
+    'classifier__max_depth': [10, 20, None]
+}
 
-# Evaluation part for the model
-print("Accuracy Score:", accuracy_score(y_test, y_pred))
-print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
-print("Classification Report:\n", classification_report(y_test, y_pred))
+grid_search_rf = GridSearchCV(pipeline_rf, param_grid_rf, cv=5)
+grid_search_rf.fit(X_train, y_train)
 
-# Test messages
+# Best RandomForest model
+best_rf = grid_search_rf.best_estimator_
+
+# Evaluate Random Forest model
+y_pred_rf = best_rf.predict(X_test)
+print("Random Forest Accuracy:", accuracy_score(y_test, y_pred_rf))
+print("Random Forest Confusion Matrix:\n", confusion_matrix(y_test, y_pred_rf))
+print("Random Forest Classification Report:\n", classification_report(y_test, y_pred_rf))
+
+# Now using Naive Bayes for comparison
+pipeline_nb.fit(X_train, y_train)
+y_pred_nb = pipeline_nb.predict(X_test)
+
+# Evaluate Naive Bayes model
+print("Naive Bayes Accuracy:", accuracy_score(y_test, y_pred_nb))
+print("Naive Bayes Confusion Matrix:\n", confusion_matrix(y_test, y_pred_nb))
+print("Naive Bayes Classification Report:\n", classification_report(y_test, y_pred_nb))
+
+# Wordcloud visualization for ham and spam messages
+ham_messages = " ".join(df[df['label'] == 'ham']['message'])
+spam_messages = " ".join(df[df['label'] == 'spam']['message'])
+
+wordcloud_ham = WordCloud(width=800, height=400).generate(ham_messages)
+wordcloud_spam = WordCloud(width=800, height=400).generate(spam_messages)
+
+# Plot wordclouds
+plt.figure(figsize=(12, 6))
+plt.subplot(1, 2, 1)
+plt.imshow(wordcloud_ham, interpolation='bilinear')
+plt.title("Ham Messages Wordcloud")
+plt.axis("off")
+plt.subplot(1, 2, 2)
+plt.imshow(wordcloud_spam, interpolation='bilinear')
+plt.title("Spam Messages Wordcloud")
+plt.axis("off")
+plt.show()
+
+# Save the best model (Random Forest) for future use
+joblib.dump(best_rf, "spam_classifier_rf.pkl")
+
+# Example predictions
 test1 = ["Hello, you are a Natural Language Processing student."]
 test2 = ["Congratulations! You won a lottery ticket worth 1 million dollars! To claim call on 444560"]
 
-print("Test 1 Prediction:", classifier.predict(test1))
-print("Test 2 Prediction:", classifier.predict(test2))
+print("Test 1 Prediction:", best_rf.predict(test1))
+print("Test 2 Prediction:", best_rf.predict(test2))
+
